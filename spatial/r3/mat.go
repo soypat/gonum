@@ -198,9 +198,10 @@ func (m *Mat) Det() float64 {
 	return a*deta - b*detb + c*detc
 }
 
-// Hessian sets the receiver to the Hessian matrix of a scalar field
-// evaluated at point p. Additional points evaluated to calculate hessian
-// are spaced at most tol away from p.
+// Hessian sets the receiver to the Hessian matrix at point p of a scalar
+// field fn. fn is also evaluated at points in the area surrounding p by adding
+// at most 2 components of step to p. Hessian expects fn's second partial
+// derivatives are all continuous for correct results.
 func (m *Mat) Hessian(p, step Vec, fn func(Vec) float64) {
 	dx := Vec{X: step.X}
 	dy := Vec{Y: step.Y}
