@@ -917,7 +917,7 @@ func constructQPBidiagonal(vect lapack.ApplyOrtho, m, n, nb int, a []float64, ld
 // printRowise prints the matrix with one row per line. This is useful for debugging.
 // If beyond is true, it prints beyond the final column to lda. If false, only
 // the columns are printed.
-//lint:ignore U1000 This is useful for debugging.
+//nolint:deadcode,unused
 func printRowise(a []float64, m, n, lda int, beyond bool) {
 	for i := 0; i < m; i++ {
 		end := n
@@ -1113,7 +1113,6 @@ func isSchurCanonicalGeneral(t blas64.General) bool {
 
 // schurBlockEigenvalues returns the two eigenvalues of the 2×2 matrix [a b; c d]
 // that must be in Schur canonical form.
-//lint:ignore U1000 This is useful for debugging.
 func schurBlockEigenvalues(a, b, c, d float64) (ev1, ev2 complex128) {
 	if !isSchurCanonical(a, b, c, d) {
 		panic("block not in Schur canonical form")

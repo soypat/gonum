@@ -50,7 +50,7 @@ import (
 func (impl Implementation) Dlatdf(job lapack.MaximizeNormXJob, n int, z []float64, ldz int, rhs []float64, rdsum, rdscal float64, ipiv, jpiv []int) (scale, sum float64) {
 	switch {
 	case job != lapack.LocalLookAhead && job != lapack.NormalizedNullVector:
-		panic(badMaximizeNormXJob)
+		panic("badMaximizeNormXJob")
 	case n < 0:
 		panic(nLT0)
 	case n > 8:

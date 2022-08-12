@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"gonum.org/v1/gonum/lapack/testlapack"
+	//"D:\GO\pkg\mod\gonum.org\v1\gonum@v0.9.3\lapack\testlapack"
 )
 
 var impl = Implementation{}
@@ -87,11 +88,6 @@ func TestDgerq2(t *testing.T) {
 	testlapack.Dgerq2Test(t, impl)
 }
 
-func TestDgesc2(t *testing.T) {
-	t.Parallel()
-	testlapack.Dgesc2Test(t, impl)
-}
-
 func TestDgeqp3(t *testing.T) {
 	t.Parallel()
 	testlapack.Dgeqp3Test(t, impl)
@@ -112,20 +108,10 @@ func TestDgerqf(t *testing.T) {
 	testlapack.DgerqfTest(t, impl)
 }
 
-func TestDgesv(t *testing.T) {
-	t.Parallel()
-	testlapack.DgesvTest(t, impl)
-}
-
 func TestDgesvd(t *testing.T) {
 	t.Parallel()
 	const tol = 1e-13
 	testlapack.DgesvdTest(t, impl, tol)
-}
-
-func TestDgetc2(t *testing.T) {
-	t.Parallel()
-	testlapack.Dgetc2Test(t, impl)
 }
 
 func TestDgetri(t *testing.T) {
@@ -193,11 +179,6 @@ func TestDlaexc(t *testing.T) {
 	testlapack.DlaexcTest(t, impl)
 }
 
-func TestDlag2(t *testing.T) {
-	t.Parallel()
-	testlapack.Dlag2Test(t, impl)
-}
-
 func TestDlags2(t *testing.T) {
 	t.Parallel()
 	testlapack.Dlags2Test(t, impl)
@@ -223,11 +204,6 @@ func TestDlaln2(t *testing.T) {
 	testlapack.Dlaln2Test(t, impl)
 }
 
-func TestDlangb(t *testing.T) {
-	t.Parallel()
-	testlapack.DlangbTest(t, impl)
-}
-
 func TestDlange(t *testing.T) {
 	t.Parallel()
 	testlapack.DlangeTest(t, impl)
@@ -246,11 +222,6 @@ func TestDlapy2(t *testing.T) {
 func TestDlapll(t *testing.T) {
 	t.Parallel()
 	testlapack.DlapllTest(t, impl)
-}
-
-func TestDlapmr(t *testing.T) {
-	t.Parallel()
-	testlapack.DlapmrTest(t, impl)
 }
 
 func TestDlapmt(t *testing.T) {
@@ -468,11 +439,6 @@ func TestDorgqr(t *testing.T) {
 	testlapack.DorgqrTest(t, impl)
 }
 
-func TestDorgr2(t *testing.T) {
-	t.Parallel()
-	testlapack.Dorgr2Test(t, impl)
-}
-
 func TestDorgtr(t *testing.T) {
 	t.Parallel()
 	testlapack.DorgtrTest(t, impl)
@@ -558,16 +524,6 @@ func TestDpotrs(t *testing.T) {
 	testlapack.DpotrsTest(t, impl)
 }
 
-func TestDpstf2(t *testing.T) {
-	t.Parallel()
-	testlapack.Dpstf2Test(t, impl)
-}
-
-func TestDpstrf(t *testing.T) {
-	t.Parallel()
-	testlapack.DpstrfTest(t, impl)
-}
-
 func TestDrscl(t *testing.T) {
 	t.Parallel()
 	testlapack.DrsclTest(t, impl)
@@ -646,4 +602,9 @@ func TestIladlc(t *testing.T) {
 func TestIladlr(t *testing.T) {
 	t.Parallel()
 	testlapack.IladlrTest(t, impl)
+}
+
+func TestDtgsyl(t *testing.T) {
+	t.Parallel()
+	testlapack.DtgsylTest(t, impl)
 }

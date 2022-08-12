@@ -6,7 +6,6 @@ package testlapack
 
 import (
 	"fmt"
-	"math"
 	"testing"
 
 	"golang.org/x/exp/rand"
@@ -15,7 +14,6 @@ import (
 )
 
 func DlangbBenchmark(b *testing.B, impl Dlangber) {
-	var result float64
 	rnd := rand.New(rand.NewSource(1))
 	for _, bm := range []struct {
 		n, k int
@@ -84,8 +82,5 @@ func DlangbBenchmark(b *testing.B, impl Dlangber) {
 				}
 			})
 		}
-	}
-	if math.IsNaN(result) {
-		b.Error("unexpected NaN result")
 	}
 }

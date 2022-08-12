@@ -6,7 +6,6 @@ package testlapack
 
 import (
 	"fmt"
-	"math"
 	"testing"
 
 	"golang.org/x/exp/rand"
@@ -15,8 +14,9 @@ import (
 	"gonum.org/v1/gonum/lapack"
 )
 
+var result float64
+
 func DlantbBenchmark(b *testing.B, impl Dlantber) {
-	var result float64
 	rnd := rand.New(rand.NewSource(1))
 	for _, bm := range []struct {
 		n, k int
@@ -50,8 +50,5 @@ func DlantbBenchmark(b *testing.B, impl Dlantber) {
 				}
 			}
 		}
-	}
-	if math.IsNaN(result) {
-		b.Error("unexpected NaN result")
 	}
 }

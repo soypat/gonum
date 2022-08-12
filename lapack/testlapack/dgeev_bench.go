@@ -13,8 +13,9 @@ import (
 	"gonum.org/v1/gonum/lapack"
 )
 
+var resultGeneral blas64.General
+
 func DgeevBenchmark(b *testing.B, impl Dgeever) {
-	var resultGeneral blas64.General
 	rnd := rand.New(rand.NewSource(1))
 	benchmarks := []struct {
 		name string
@@ -57,8 +58,5 @@ func DgeevBenchmark(b *testing.B, impl Dgeever) {
 			}
 			resultGeneral = a
 		})
-	}
-	if resultGeneral.Data == nil {
-		b.Error("unexpected nil data")
 	}
 }
