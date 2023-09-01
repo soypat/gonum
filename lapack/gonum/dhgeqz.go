@@ -78,6 +78,7 @@ import (
 // Ref: C.B. Moler & G.W. Stewart, "An Algorithm for Generalized Matrix Eigenvalue Problems", SIAM J. Numer. Anal., 10(1973), pp. 241--256.
 // https://doi.org/10.1137/0710024
 func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.SchurComp, n, ilo, ihi int, h []float64, ldh int, t []float64, ldt int, alphar, alphai, beta, q []float64, ldq int, z []float64, ldz int, work []float64, workspaceQuery bool) (info int) {
+	_ = _column(h, 1, 0, 0)
 	var (
 		jiter int // counts QZ iterations in main loop.
 		// counts iterations run since ILAST was last changed.
@@ -937,4 +938,13 @@ ThreeEighty:
 	}
 
 	return -1 // Normal termination.
+}
+
+// _column copies the j-th column of z into a new slice of length m.
+func _column(z []float64, ldz, j, m int) []float64 {
+	v := make([]float64, m)
+	for i := range v {
+		v[i] = z[i*ldz+j]
+	}
+	return v
 }

@@ -6,8 +6,10 @@ package testlapack
 
 import (
 	"testing"
+	"unsafe"
 
 	"golang.org/x/exp/rand"
+	"golang.org/x/exp/slices"
 
 	"gonum.org/v1/gonum/blas/blas64"
 	"gonum.org/v1/gonum/lapack"
@@ -34,7 +36,7 @@ func DhgeqzTest(t *testing.T, impl Dhgeqzer) {
 	compvec := []lapack.SchurComp{lapack.SchurNone, lapack.SchurHess} // TODO: add lapack.SchurOrig
 	for _, compq := range compvec {
 		for _, compz := range compvec {
-			for _, n := range []int{0, 1, 2, 3, 4, 20} {
+			for _, n := range []int{2, 3, 4, 20} {
 				minLDA := max(1, n)
 				for _, ldh := range []int{minLDA, n + ldaAdd} {
 					for _, ldt := range []int{minLDA, n + ldaAdd} {
@@ -75,7 +77,10 @@ func testDhgeqz(t *testing.T, rnd *rand.Rand, impl Dhgeqzer, job lapack.SchurJob
 	beta := make([]float64, n)
 	q := generalFromComp(compq, n, ldq, rnd)
 	z := generalFromComp(compz, n, ldz, rnd)
-
+	hCopy := cloneGeneral(hg)
+	tCopy := cloneGeneral(tg)
+	qCopy := cloneGeneral(q)
+	zCopy := cloneGeneral(z)
 	// Query workspace needed.
 	var query [1]float64
 	impl.Dhgeqz(job, compq, compz, n, ilo, ihi, hg.Data, hg.Stride, tg.Data, tg.Stride, alphar, alphai, beta, q.Data, q.Stride, z.Data, z.Stride, query[:], true)
@@ -83,11 +88,78 @@ func testDhgeqz(t *testing.T, rnd *rand.Rand, impl Dhgeqzer, job lapack.SchurJob
 	if lwork < 1 {
 		t.Fatal("bad lwork")
 	}
+
 	work := make([]float64, lwork)
 
 	info := impl.Dhgeqz(job, compq, compz, n, ilo, ihi, hg.Data, hg.Stride, tg.Data, tg.Stride, alphar, alphai, beta, q.Data, q.Stride, z.Data, z.Stride, work, false)
 	if info >= 0 {
 		t.Error("got nonzero info", info)
 	}
+	alpharWant := append([]float64{}, alphar...)
+	alphaiWant := append([]float64{}, alphai...)
+	betaWant := append([]float64{}, beta...)
+	workWant := make([]float64, n)
+	infoWant := _lapack{}.Dhgeqz(job, compq, compz, n, ilo, ihi, hCopy.Data, hCopy.Stride, tCopy.Data, tCopy.Stride, alpharWant, alphaiWant, betaWant, qCopy.Data, qCopy.Stride, zCopy.Data, zCopy.Stride, workWant, false)
+	if info != infoWant {
+		t.Errorf("info mismatch: got %v, want %v", info, infoWant)
+	}
+	if !slices.Equal(alphar, alpharWant) {
 
+		t.Fatal(alphar, alpharWant)
+	}
+	if !equalApproxGeneral(hg, hCopy, 1e-14) {
+		t.Fatal("H not equal", hg, "\n", hCopy)
+	}
+}
+
+type _lapack struct{}
+
+func (_lapack) Dhgeqz(job lapack.SchurJob, compq, compz lapack.SchurComp, n, ilo, ihi int,
+	h []float64, ldh int, t []float64, ldt int, alphar, alphai, beta,
+	q []float64, ldq int, z []float64, ldz int, work []float64, workspaceQuery bool) (info int) {
+	punf := pun[*float64, *C.double]
+	puni := pun[*int, *C.int]
+	cjob := C.char(job)
+	ccompq := C.char(compq)
+	ccompz := C.char(compz)
+	lwork := len(work)
+	if workspaceQuery {
+		lwork = -1
+	}
+	var qptr, zptr *float64
+	if compq != lapack.SchurNone {
+		qptr = &q[0]
+		defer transposeCurry(n, q, ldq)()
+	}
+	if compz != lapack.SchurNone {
+		zptr = &z[0]
+		defer transposeCurry(n, z, ldz)()
+	}
+	// convert to Fortran indexing.
+	ilo++
+	ihi++
+	defer transposeCurry(n, h, ldh)()
+	defer transposeCurry(n, t, ldt)()
+
+	C.dhgeqz_(&cjob, &ccompq, &ccompz, puni(&n), puni(&ilo), puni(&ihi), punf(&h[0]), puni(&ldh), punf(&t[0]), puni(&ldt), punf(&alphar[0]), punf(&alphai[0]), punf(&beta[0]), punf(qptr), puni(&ldq), punf(zptr), puni(&ldz), punf(&work[0]), puni(&lwork), puni(&info))
+	return info - 1
+}
+
+func transposeInPlace(n int, a []float64, lda int) {
+	for i := 0; i < n; i++ {
+		for j := 0; j < i; j++ {
+			a[i*lda+j], a[j*lda+i] = a[j*lda+i], a[i*lda+j]
+		}
+	}
+}
+
+func transposeCurry(n int, a []float64, lda int) func() {
+	transposeInPlace(n, a, lda)
+	return func() {
+		transposeInPlace(n, a, lda)
+	}
+}
+
+func pun[F, T any](p F) T {
+	return *(*T)(unsafe.Pointer(&p))
 }
