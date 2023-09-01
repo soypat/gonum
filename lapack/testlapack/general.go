@@ -292,6 +292,11 @@ func blockedUpperTriGeneral(r, c, k, l, stride int, kblock bool, rnd *rand.Rand)
 	return ans
 }
 
+// upperTriGeneral returns a normal random, upper triangular general matrix.
+func upperTriGeneral(r, c, stride int, rnd *rand.Rand) blas64.General {
+	return blockedUpperTriGeneral(r, c, 0, 0, stride, false, rnd)
+}
+
 // nanTriangular allocates a new r×c triangular matrix filled with NaN values.
 func nanTriangular(uplo blas.Uplo, n, stride int) blas64.Triangular {
 	if n < 0 {

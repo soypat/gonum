@@ -65,39 +65,40 @@ import (
 //
 //	alpha = S(i,i), beta = P(i,i).
 //
-// - info=-1: successful exit
-// - info>=0:
+// Argument info:
+//   - info=-1: successful exit
+//   - info>=0:
 //   - info<=n: The QZ iteration did not converge. (H,T) is not in Schur form
 //     but alphar(i), alphai(i), and beta(i), i=info+1,...,n should be correct.
 //   - info=n+1...2*n: The shift calculation failed. (H,T) is not in Schur form
 //     but alphar(i), alphai(i), and beta(i), i=info-n+1,...,n should be correct.
+//   - alphar, alphai, beta are vectors of length n.
+//   - work is a vector of length max(1, n)
 //
 // Ref: C.B. Moler & G.W. Stewart, "An Algorithm for Generalized Matrix Eigenvalue Problems", SIAM J. Numer. Anal., 10(1973), pp. 241--256.
 // https://doi.org/10.1137/0710024
 func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.SchurComp, n, ilo, ihi int, h []float64, ldh int, t []float64, ldt int, alphar, alphai, beta, q []float64, ldq int, z []float64, ldz int, work []float64, workspaceQuery bool) (info int) {
 	var (
-		jiter int // counts iterations
+		jiter int // counts QZ iterations in main loop.
 		// counts iterations run since ILAST was last changed.
 		//This is therefore reset only when a 1-by-1 or  2-by-2 block deflates off the bottom.
-		iiter                                                                     int
-		ilschr, ilq, ilz, ilazro, ilazr2, ilpivt                                  bool
-		ischur, icompq, icompz, ifirst, istart, j, maxiter, ilast, ilastm, ifrstm int
-		c, s, s1, s2, wr, wr2, wi, scale, temp, tempr, temp2, tempi               float64 // Trigonometric temporary variables.
-		b22, b11, sr, cr, sl, cl, cz, t1, slinv, szr, szi, wabs, an, bn           float64
-		a11, a21, a12, a22, c11r, c11i, c12, c21, c22r, c22i                      float64
-		cq, sqr, sqi, a1r, a1i, a2r, a2i, ad11, ad21, ad12, ad22                  float64
-		u12, ad11l, ad21l, ad12l, ad22l, ad32l, u12l, vs, eshift                  float64
-		b1r, b1i, b1a, b2r, b2i, b2a, s1inv, tau, u1, u2, w11, w22, w12, w21      float64
-		v                                                                         [3]float64
+		iiter                                                                int
+		ilschr, ilq, ilz, ilazro, ilazr2, ilpivt                             bool
+		icompq, icompz, ifirst, istart, j, maxiter, ilast, ilastm, ifrstm    int
+		c, s, s1, s2, wr, wr2, wi, scale, temp, tempr, temp2, tempi          float64 // Trigonometric temporary variables.
+		b22, b11, sr, cr, sl, cl, cz, t1, szr, szi, wabs, an, bn             float64
+		a11, a21, a12, a22, c11r, c11i, c12, c21, c22r, c22i                 float64
+		cq, sqr, sqi, a1r, a1i, a2r, a2i, ad11, ad21, ad12, ad22             float64
+		u12, ad11l, ad21l, ad12l, ad22l, ad32l, u12l, vs, eshift             float64
+		b1r, b1i, b1a, b2r, b2i, b2a, s1inv, tau, u1, u2, w11, w22, w12, w21 float64
+		v                                                                    [3]float64
 	)
 
 	switch job {
 	case lapack.EigenvaluesOnly:
 		ilschr = false
-		ischur = 1
 	case lapack.EigenvaluesAndSchur:
 		ilschr = true
-		ischur = 2
 	default:
 		panic(badSchurJob)
 	}
@@ -132,9 +133,9 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 	switch {
 	case n < 0:
 		panic(nLT0)
-	case ilo < 0:
+	case ilo < 0 || ilo >= n:
 		panic(badIlo)
-	case ilo-1 < ihi || ihi > n:
+	case ihi < ilo-1 || ihi >= n:
 		panic(badIhi)
 	case ldh < n:
 		panic(badLdH)
@@ -146,11 +147,10 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 		panic(badLdZ)
 	case lwork < max(1, n) && !workspaceQuery:
 		panic(badLWork)
-	}
-	info = -1 // info==-1 is succesful exit.
-	if n == 0 {
-		work[0] = 1
-		return info
+	case n == 0 || workspaceQuery:
+		// Quick return or is workspace query.
+		work[0] = float64(max(1, n))
+		return -1
 	}
 
 	// Initialize Q and Z.
@@ -209,6 +209,12 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 	// MAIN QZ ITERATION LOOP
 	// Initialize dynamic indices.
 	// Eigenvalues ILAST+1:N have been found.
+	// Column operations modify rows IFRSTM:whatever.
+	// Row operations modify columns whatever:ILASTM.
+	//
+	// iiter counts iterations since last eigenvalue was found
+	//  to tell when to use an extraordinary shift.
+	// Maxit is the maximum number of QZ sweeps allowed.
 	ilast = ihi
 	ifrstm = ilo
 	ilastm = ihi
@@ -238,7 +244,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 
 		// General case: j<ilast.
 
-		for j := ilast - 1; j >= ilo; j-- {
+		for j = ilast - 1; j >= ilo; j-- {
 			// Test 1: for H(j,j-1)=0 or j=ILO
 			if j == ilo {
 				ilazro = true
@@ -258,7 +264,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 				//Test 1a: Check for 2 consecutive small subdiagonals in A.
 				ilazr2 = false
 				if !ilazro {
-					temp = math.Abs(h[j*ldh+j-1]) + math.Abs(h[(j-1)*ldh+j-2])
+					temp = math.Abs(h[j*ldh+j-1])
 					temp2 := math.Abs(h[j*ldh+j])
 					tempr = math.Max(temp, temp2)
 					if tempr < 1 && tempr != 0 {
@@ -278,7 +284,35 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 					for jch := j; jch <= ilast-1; jch++ {
 						temp := h[jch*ldh+jch]
 						c, s, h[jch*ldh+jch] = impl.Dlartg(temp, h[(jch+1)*ldh+jch])
+						h[(jch+1)*ldh+jch] = 0
+						bi.Drot(ilastm-jch, h[jch*ldh+jch+1:], 1, h[(jch+1)*ldh+jch+1:], 1, c, s)
+						bi.Drot(ilastm-jch, t[jch*ldt+jch+1:], 1, t[(jch+1)*ldt+jch+1:], 1, c, s)
+						if ilq {
+							bi.Drot(n, q[jch:], ldq, q[jch+1:], ldq, c, s)
+						}
+						if ilazr2 {
+							h[jch*ldh+jch-1] *= c
+						}
+						ilazr2 = false
+						if math.Abs(t[(jch+1)*ldt+jch+1]) < btol {
+							if jch+1 >= ilast {
+								goto Eighty
+							} else {
+								ifirst = jch + 1
+								goto OneTen
+							}
+						}
 						t[(jch+1)*ldt+jch+1] = 0
+					}
+					goto Seventy
+				} else {
+					// Only test 2 passed -- chase the zero to T(ILAST,ILAST).
+					// Then process as is in the case t(ilast, ilast)=0
+					for jch := j; jch <= ilast-1; jch++ {
+						temp = t[jch*ldt+jch+1]
+						c, s, t[jch*ldt+jch+1] = impl.Dlartg(temp, t[(jch+1)*ldt+jch+1])
+						t[(jch+1)*ldt+jch+1] = 0
+
 						if jch < ilastm-1 {
 							bi.Drot(ilastm-jch-1, t[jch*ldt+jch+2:], 1, t[(jch+1)*ldt+jch+2:], 1, c, s)
 						}
@@ -296,11 +330,12 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 							bi.Drot(n, z[jch:], ldz, z[jch-1:], ldz, c, s)
 						}
 					}
+					goto Seventy
 				}
 			} else if ilazro {
 				// Only test 1 passed -- work on j:ilast.
 				ifirst = j
-				// goto 110
+				goto OneTen
 			}
 			// Neither test passed -- try next j.
 		}
@@ -344,7 +379,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 		// Go to next block -- exit if finished.
 		ilast--
 		if ilast < ilo {
-			// goto 380
+			goto ThreeEighty
 		}
 		// Reset counters.
 
@@ -356,12 +391,12 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 				ifrstm = ilo
 			}
 		}
-		// goto 350.
+		goto ThreeFifty
 
 		// QZ Step
 		// This iteration only involves rows/columns IFIRST:ILAST. We
 		// assume IFIRST < ILAST, and that the diagonal of B is non-zero.
-		goto OneTen
+
 	OneTen:
 		iiter++
 		if !ilschr {
@@ -414,7 +449,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 		wr *= scale
 
 		// Now check for two consecutive small subdiagonals.
-		for j := ilast - 1; j >= ifirst+1; j-- {
+		for j = ilast - 1; j >= ifirst+1; j-- {
 			istart = j
 			temp = math.Abs(s1 * h[j*ldh+j-1])
 			temp2 := math.Abs(s1*h[j*ldh+j] - wr*t[j*ldt+j])
@@ -438,7 +473,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 		c, s, tempr = impl.Dlartg(temp, s1*h[(istart+1)*ldh+istart])
 
 		// Sweep.
-		for j := istart; j < ilast-1; j++ {
+		for j = istart; j < ilast-1; j++ {
 			if j > istart {
 				temp = h[j*ldh+j-1]
 				c, s, h[j*ldh+j-1] = impl.Dlartg(temp, h[(j+1)*ldh+j-1])
@@ -459,9 +494,11 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 					q[jr*ldq+j] = temp
 				}
 			}
+
 			temp = t[(j+1)*ldt+j+1]
 			c, s, t[(j+1)*ldt+j+1] = impl.Dlartg(temp, t[(j+1)*ldt+j])
 			t[(j+1)*ldt+j] = 0
+
 			maxjr := min(j+2, ilast)
 			for jr := ifrstm; jr <= maxjr; jr++ {
 				temp = c*h[jr*ldh+j+1] + s*h[jr*ldh+j]
@@ -481,7 +518,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 				}
 			}
 		}
-		// goto 350.
+		goto ThreeFifty
 
 		// Use Francis double-shift.
 
@@ -522,6 +559,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 
 			// If B22 is negative, negate column ilast.
 			if b22 < 0 {
+				b22 = -b22
 				for j := ifrstm; j <= ilast; j++ {
 					h[j*ldh+ilast] = -h[j*ldh+ilast]
 					t[j*ldt+ilast] = -t[j*ldt+ilast]
@@ -531,26 +569,25 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 						z[j*ldz+ilast] = -z[j*ldz+ilast]
 					}
 				}
-				b22 = -b22
 			}
 
 			// Step 2: compute alphar, alphai, and beta.
 			// Recompute shift.
-			s1, temp, wr, temp2, wi = impl.Dlag2(h[(ilast-1)*ldh+ilast-1:], ldh, t[(ilast-1)*ldt+ilast-1:], ldt)
+			s1, _, wr, _, wi = impl.Dlag2(h[(ilast-1)*ldh+ilast-1:], ldh, t[(ilast-1)*ldt+ilast-1:], ldt)
 			if wi == 0 {
 				// If standardization has perturbed the shift onto real line, do another QR step.
-				// goto 350
+				goto ThreeFifty
 			}
-			slinv = 1 / s1
-			// Do EISPACK (QZVAL) computation of alpha and beta.
+			s1inv = 1 / s1
 
+			// Do EISPACK (QZVAL) computation of alpha and beta.
 			a11 = h[(ilast-1)*ldh+ilast-1]
 			a21 = h[ilast*ldh+ilast-1]
 			a12 = h[(ilast-1)*ldh+ilast]
 			a22 = h[ilast*ldh+ilast]
 
 			// Compute complex Givens rotation on right assuming some element of C = (sA -wB)>unfl:
-			// ( sA - wB ) (  CZ    -SZ  )
+			// ( sA - wB ) (  CZ    -^SZ  )
 			//             (  SZ     CZ  )
 
 			c11r = s1*a11 - wr*b11
@@ -583,7 +620,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 
 			// Compute Givens rotation on left
 			// ( CQ   SQ )
-			// (-SQ   CQ )   A or B.
+			// (-^SQ   CQ )   A or B.
 
 			an = math.Abs(a11) + math.Abs(a12) + math.Abs(a21) + math.Abs(a22)
 			bn = math.Abs(b11) + math.Abs(b22)
@@ -610,9 +647,9 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 				}
 			}
 			t1 = impl.Dlapy3(cq, sqr, sqi)
-			cq = cq / t1
-			sqr = sqr / t1
-			sqi = sqi / t1
+			cq /= t1
+			sqr /= t1
+			sqi /= t1
 
 			// Compute diagonal elements of QBZ.
 			tempr = sqr*szr - sqi*szi
@@ -635,7 +672,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 			// Step 3: Go to next block -- exit if finished.
 			ilast = ifirst - 1
 			if ilast < ilo {
-				// goto 380
+				goto ThreeEighty
 			}
 
 			// Reset counters.
@@ -646,8 +683,8 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 				if ifrstm > ilast {
 					ifrstm = ilo
 				}
-				// goto 350
 			}
+			goto ThreeFifty
 		} else {
 			// Usual case: 3x3 or larger block, using Francis implicit double shift.
 			//
@@ -694,7 +731,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 					v[1] = h[(j+1)*ldh+j-1]
 					v[2] = h[(j+2)*ldh+j-1]
 
-					_, tau = impl.Dlarfg(3, h[j*ldh+j-1], v[1:], 1)
+					h[j*ldh+j-1], tau = impl.Dlarfg(3, h[j*ldh+j-1], v[1:], 1)
 					v[0] = 1
 					h[(j+1)*ldh+j-1] = 0
 					h[(j+2)*ldh+j-1] = 0
@@ -729,7 +766,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 					scale = 0
 					u1 = 1
 					u2 = 0
-					// goto 250
+					goto TwoFifty
 				} else if temp >= temp2 {
 					w11 = t[(j+1)*ldt+j+1]
 					w21 = t[(j+2)*ldt+j+1]
@@ -749,12 +786,8 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 				// Swap columns if necessary.
 				if math.Abs(w12) > math.Abs(w11) {
 					ilpivt = true
-					temp = w12
-					temp2 = w22
-					w12 = w11
-					w22 = w21
-					w11 = temp
-					w21 = temp2
+					w12, w11 = w11, w12
+					w22, w21 = w21, w22
 				}
 
 				// LU Factor.
@@ -769,7 +802,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 					scale = 0
 					u2 = 1
 					u1 = -w12 / w11
-					// goto 250
+					goto TwoFifty
 				}
 				if math.Abs(w22) < math.Abs(u2) {
 					scale = math.Abs(w22 / u2)
@@ -782,7 +815,8 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 				u2 = (scale * u2) / w22
 				u1 = (scale*u1 - w12*u2) / w11
 
-				// Continue 250. TwoFifty:
+			TwoFifty: // Continue 250.
+
 				if ilpivt {
 					u1, u2 = u2, u1
 				}
@@ -870,6 +904,8 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 			// End of double-shift code.
 		} // End of big if.
 
+	ThreeFifty: // Continue with next QZ iteration (jiter++).
+
 	}
 	// Drop through, non convergence.
 	work[0] = float64(n)
@@ -878,7 +914,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 ThreeEighty:
 	// Succesful completion of all QZ steps.
 	// Set Eigenvalues 1:ILO-1
-	for j := 0; j <= ilo; j++ {
+	for j = 0; j <= ilo; j++ {
 		if t[j*ldt+j] < 0 {
 			if ilschr {
 				for jr := 0; jr <= j; jr++ {
