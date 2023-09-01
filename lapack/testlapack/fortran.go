@@ -33,3 +33,24 @@ func printFortranArray(z []float64, name string) {
 	}
 	fmt.Printf("%s/)\n", fortran64(z[len(z)-1]))
 }
+
+func printFortranReshape(name string, z []float64, transpose, lineseparated bool, dims ...int) {
+	fmt.Printf("%s = reshape((/%v, ", name, fortran64(z[0]))
+	for i := 1; i < len(z)-1; i++ {
+		fmt.Printf("%v, ", fortran64(z[i]))
+		if lineseparated {
+			fmt.Print("&\n")
+		}
+	}
+	fmt.Printf("%v/), (/", fortran64(z[len(z)-1]))
+	for i, d := range dims {
+		if i != 0 {
+			fmt.Printf(", ")
+		}
+		fmt.Printf("%d", d)
+	}
+	fmt.Print("/))\n")
+	if transpose {
+		fmt.Printf("%s = transpose(%s)\n", name, name)
+	}
+}

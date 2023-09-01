@@ -171,8 +171,8 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 
 	in := ihi + 1 - ilo
 	bi := blas64.Implementation()
-	anorm := impl.Dlange(lapack.MaxColumnSum, in, in, h[ilo*ldh+ilo:], ldh, work)
-	bnorm := impl.Dlange(lapack.MaxColumnSum, in, in, t[ilo*ldt+ilo:], ldt, work)
+	anorm := impl.Dlange('F', in, in, h[ilo*ldh+ilo:], ldh, work)
+	bnorm := impl.Dlange('F', in, in, t[ilo*ldt+ilo:], ldt, work)
 
 	atol := math.Max(safmin, ulp*anorm)
 	btol := math.Max(safmin, ulp*bnorm)
@@ -220,8 +220,8 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 	ifrstm = ilo
 	ilastm = ihi
 	if ilschr {
-		ifrstm = 1
-		ilastm = n
+		ifrstm = 0
+		ilastm = n - 1
 	}
 
 	maxiter = 30 * (ihi - ilo + 1)
@@ -360,16 +360,16 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 		if t[ilast*ldt+ilast] < 0 {
 			if ilschr {
 				for j := ifrstm; j <= ilast; j++ {
-					h[j*ldh+j] = -h[j*ldh+j]
-					t[j*ldt+j] = -t[j*ldt+j]
+					h[j*ldh+ilast] *= -1
+					t[j*ldt+ilast] *= -1
 				}
 			} else {
-				h[ilast*ldh+ilast] = -h[ilast*ldh+ilast]
-				t[ilast*ldt+ilast] = -t[ilast*ldt+ilast]
+				h[ilast*ldh+ilast] *= -1
+				t[ilast*ldt+ilast] *= -1
 			}
 			if ilz {
 				for j := 0; j < n; j++ {
-					z[j*ldz+ilast] = -z[j*ldz+ilast]
+					z[j*ldz+ilast] *= -1
 				}
 			}
 		}
@@ -474,7 +474,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 		c, s, tempr = impl.Dlartg(temp, s1*h[(istart+1)*ldh+istart])
 
 		// Sweep.
-		for j = istart; j < ilast-1; j++ {
+		for j = istart; j <= ilast-1; j++ {
 			if j > istart {
 				temp = h[j*ldh+j-1]
 				c, s, h[j*ldh+j-1] = impl.Dlartg(temp, h[(j+1)*ldh+j-1])
@@ -506,7 +506,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 				h[jr*ldh+j] = -s*h[jr*ldh+j+1] + c*h[jr*ldh+j]
 				h[jr*ldh+j+1] = temp
 			}
-			for jr := ifrstm; jr <= ilastm; jr++ {
+			for jr := ifrstm; jr <= j; jr++ {
 				temp = c*t[jr*ldt+j+1] + s*t[jr*ldt+j]
 				t[jr*ldt+j] = -s*t[jr*ldt+j+1] + c*t[jr*ldt+j]
 				t[jr*ldt+j+1] = temp

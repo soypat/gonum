@@ -5,6 +5,7 @@
 package testlapack
 
 import (
+	"fmt"
 	"testing"
 	"unsafe"
 
@@ -31,8 +32,11 @@ type Dhgeqzer interface {
 }
 
 func DhgeqzTest(t *testing.T, impl Dhgeqzer) {
-	rnd := rand.New(rand.NewSource(1))
-	const ldaAdd = 5
+	rnd := rand.New(rand.NewSource(uint64(2)))
+	const ldaAdd = 0
+	// n := 2
+	// testDhgeqz(t, rnd, impl, lapack.EigenvaluesAndSchur, lapack.SchurNone, lapack.SchurNone, n, 0, 1, n, n, n, n)
+	// return
 	compvec := []lapack.SchurComp{lapack.SchurNone, lapack.SchurHess} // TODO: add lapack.SchurOrig
 	for _, compq := range compvec {
 		for _, compz := range compvec {
@@ -58,6 +62,8 @@ func DhgeqzTest(t *testing.T, impl Dhgeqzer) {
 }
 
 func testDhgeqz(t *testing.T, rnd *rand.Rand, impl Dhgeqzer, job lapack.SchurJob, compq, compz lapack.SchurComp, n, ilo, ihi, ldh, ldt, ldq, ldz int) {
+	name := fmt.Sprintf("Case job=%q, compq=%q, compz=%q, n=%v, ilo=%v, ihi=%v, ldh=%v, ldt=%v, ldq=%v, ldz=%v",
+		job, compq, compz, n, ilo, ihi, ldh, ldt, ldq, ldz)
 	generalFromComp := func(comp lapack.SchurComp, n, ld int, rnd *rand.Rand) blas64.General {
 		switch comp {
 		case lapack.SchurNone:
@@ -81,6 +87,9 @@ func testDhgeqz(t *testing.T, rnd *rand.Rand, impl Dhgeqzer, job lapack.SchurJob
 	tCopy := cloneGeneral(tg)
 	qCopy := cloneGeneral(q)
 	zCopy := cloneGeneral(z)
+	// printFortranReshape("h", hg.Data, true, false, n, ldh)
+	// printFortranReshape("t", tg.Data, true, false, n, ldt)
+
 	// Query workspace needed.
 	var query [1]float64
 	impl.Dhgeqz(job, compq, compz, n, ilo, ihi, hg.Data, hg.Stride, tg.Data, tg.Stride, alphar, alphai, beta, q.Data, q.Stride, z.Data, z.Stride, query[:], true)
@@ -95,6 +104,8 @@ func testDhgeqz(t *testing.T, rnd *rand.Rand, impl Dhgeqzer, job lapack.SchurJob
 	if info >= 0 {
 		t.Error("got nonzero info", info)
 	}
+
+	// fmt.Println(alphar, alphai, beta)
 	alpharWant := append([]float64{}, alphar...)
 	alphaiWant := append([]float64{}, alphai...)
 	betaWant := append([]float64{}, beta...)
@@ -103,12 +114,20 @@ func testDhgeqz(t *testing.T, rnd *rand.Rand, impl Dhgeqzer, job lapack.SchurJob
 	if info != infoWant {
 		t.Errorf("info mismatch: got %v, want %v", info, infoWant)
 	}
-	if !slices.Equal(alphar, alpharWant) {
-
-		t.Fatal(alphar, alpharWant)
-	}
 	if !equalApproxGeneral(hg, hCopy, 1e-14) {
-		t.Fatal("H not equal", hg, "\n", hCopy)
+		t.Fatal(name, "H not equal", hg, "\n", hCopy)
+	}
+	if !equalApproxGeneral(tg, tCopy, 1e-14) {
+		t.Fatal(name, "T not equal", hg, "\n", hCopy)
+	}
+	if !slices.Equal(alphar, alpharWant) {
+		t.Fatal(name, "alphar not equal", alphar, alpharWant)
+	}
+	if !slices.Equal(alphai, alphaiWant) {
+		t.Fatal(name, "alphai not equal", alphai, alphaiWant)
+	}
+	if !slices.Equal(beta, betaWant) {
+		t.Fatal(name, "beta not equal", beta, betaWant)
 	}
 }
 
