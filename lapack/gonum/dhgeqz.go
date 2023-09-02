@@ -86,7 +86,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 		iiter                                                                int
 		ilschr, ilq, ilz, ilazro, ilazr2, ilpivt                             bool
 		icompq, icompz, ifirst, istart, j, maxiter, ilast, ilastm, ifrstm    int
-		c, s, s1, s2, wr, wr2, wi, scale, temp, tempr, temp2, tempi          float64 // Trigonometric temporary variables.
+		c, s, s1, s2, wr, wr2, wi, scale, temp, tempr, temp2, tempi, t2, t3  float64 // Trigonometric temporary variables.
 		b22, b11, sr, cr, sl, cl, cz, t1, szr, szi, wabs, an, bn             float64
 		a11, a21, a12, a22, c11r, c11i, c12, c21, c22r, c22i                 float64
 		cq, sqr, sqi, a1r, a1i, a2r, a2i, ad11, ad21, ad12, ad22             float64
@@ -183,17 +183,17 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 	for j = ihi + 1; j < n; j++ {
 		if t[j*ldt+j] < 0 {
 			if ilschr {
-				for jr := 0; jr < j; jr++ {
-					h[jr*ldh+j] = -h[jr*ldh+j]
-					t[jr*ldt+j] = -t[jr*ldt+j]
+				for jr := 0; jr <= j; jr++ {
+					h[jr*ldh+j] *= -1
+					t[jr*ldt+j] *= -1
 				}
 			} else {
-				h[j*ldh+j] = -h[j*ldh+j]
-				t[j*ldt+j] = -t[j*ldt+j]
+				h[j*ldh+j] *= -1
+				t[j*ldt+j] *= -1
 			}
 			if ilz {
 				for jr := 0; jr < n; jr++ {
-					z[jr*ldz+j] = -z[jr*ldz+j]
+					z[jr*ldz+j] *= -1
 				}
 			}
 		}
@@ -468,7 +468,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 	OneThirty:
 
 		// Do an implicit-shift QZ sweep.
-		// Initial Q
+		// Initial Q.
 
 		temp = s1*h[istart*ldh+istart] - wr*t[istart*ldt+istart]
 		c, s, tempr = impl.Dlartg(temp, s1*h[(istart+1)*ldh+istart])
@@ -562,12 +562,12 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 			if b22 < 0 {
 				b22 = -b22
 				for j := ifrstm; j <= ilast; j++ {
-					h[j*ldh+ilast] = -h[j*ldh+ilast]
-					t[j*ldt+ilast] = -t[j*ldt+ilast]
+					h[j*ldh+ilast] *= -1
+					t[j*ldt+ilast] *= -1
 				}
 				if ilz {
 					for j := 0; j < n; j++ {
-						z[j*ldz+ilast] = -z[j*ldz+ilast]
+						z[j*ldz+ilast] *= -1
 					}
 				}
 			}
@@ -714,8 +714,8 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 				(bscale * t[(ifirst+1)*ldt+ifirst+1])
 			u12l = t[(ifirst)*ldt+ifirst+1] / t[(ifirst+1)*ldt+ifirst+1]
 
-			v[0] = (ad11-ad11l)*(ad22-ad22l) - ad12*ad21 + ad21*u12*ad11l +
-				(ad12l-ad11l*u12l)*ad21l
+			v[0] = (ad11-ad11l)*(ad22-ad11l) - ad12*ad21 +
+				ad21*u12*ad11l + (ad12l-ad11l*u12l)*ad21l
 			v[1] = ((ad22l - ad11l) - ad21l*u12l - (ad11 - ad11l) -
 				(ad22 - ad11l) + ad21*u12) * ad21l
 			v[2] = ad32l * ad21l
@@ -737,23 +737,24 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 					h[(j+1)*ldh+j-1] = 0
 					h[(j+2)*ldh+j-1] = 0
 				}
+				t2 = tau * v[1]
+				t3 = tau * v[2]
 				for jc := j; jc <= ilastm; jc++ {
-					temp = tau * (h[j*ldh+jc] + v[1]*h[(j+1)*ldh+jc] + v[2]*h[(j+2)*ldh+jc])
-					h[j*ldh+jc] -= temp
-					h[(j+1)*ldh+jc] -= temp * v[1]
-					h[(j+2)*ldh+jc] -= temp * v[2]
-
-					temp2 = tau * (t[j*ldt+jc] + v[1]*t[(j+1)*ldt+jc] + v[2]*t[(j+2)*ldt+jc])
-					t[j*ldt+jc] -= temp2
-					t[(j+1)*ldt+jc] -= temp2 * v[1]
-					t[(j+2)*ldt+jc] -= temp2 * v[2]
+					temp = h[j*ldh+jc] + v[1]*h[(j+1)*ldh+jc] + v[2]*h[(j+2)*ldh+jc]
+					h[j*ldh+jc] -= temp * tau
+					h[(j+1)*ldh+jc] -= temp * t2
+					h[(j+2)*ldh+jc] -= temp * t3
+					temp2 = t[j*ldt+jc] + v[1]*t[(j+1)*ldt+jc] + v[2]*t[(j+2)*ldt+jc]
+					t[j*ldt+jc] -= temp2 * tau
+					t[(j+1)*ldt+jc] -= temp2 * t2
+					t[(j+2)*ldt+jc] -= temp2 * t3
 				}
 				if ilq {
 					for jr := 0; jr < n; jr++ {
-						temp = tau * (q[jr*ldq+j] + v[1]*q[jr*ldq+j+1] + v[2]*q[jr*ldq+j+2])
-						q[jr*ldq+j] -= temp
-						q[jr*ldq+j+1] -= temp * v[1]
-						q[jr*ldq+j+2] -= temp * v[2]
+						temp = q[jr*ldq+j] + v[1]*q[jr*ldq+j+1] + v[2]*q[jr*ldq+j+2]
+						q[jr*ldq+j] -= temp * tau
+						q[jr*ldq+j+1] -= temp * t2
+						q[jr*ldq+j+2] -= temp * t3
 					}
 				}
 
@@ -915,20 +916,20 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 ThreeEighty:
 	// Succesful completion of all QZ steps.
 	// Set Eigenvalues 1:ILO-1
-	for j = 0; j <= ilo; j++ {
+	for j = 0; j <= ilo-1; j++ {
 		if t[j*ldt+j] < 0 {
 			if ilschr {
 				for jr := 0; jr <= j; jr++ {
-					h[jr*ldh+j] = -h[jr*ldh+j]
-					t[jr*ldt+j] = -t[jr*ldt+j]
+					h[jr*ldh+j] *= -1
+					t[jr*ldt+j] *= -1
 				}
 			} else {
-				h[j*ldh+j] = -h[j*ldh+j]
-				t[j*ldt+j] = -t[j*ldt+j]
+				h[j*ldh+j] *= -1
+				t[j*ldt+j] *= -1
 			}
 			if ilz {
 				for jr := 0; jr < n; jr++ {
-					z[jr*ldz+j] = -z[jr*ldz+j]
+					z[jr*ldz+j] *= -1
 				}
 			}
 		}
