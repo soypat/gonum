@@ -295,7 +295,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 							h[jch*ldh+jch-1] *= c
 						}
 						ilazr2 = false
-						if math.Abs(t[(jch+1)*ldt+jch+1]) < btol {
+						if math.Abs(t[(jch+1)*ldt+jch+1]) >= btol {
 							if jch+1 >= ilast {
 								goto Eighty
 							} else {
@@ -832,25 +832,27 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 				v[2] = vs * u2
 
 				// Apply transformations from the right.
+				t2 = tau * v[1]
+				t3 = tau * v[2]
 				jrmax := min(j+3, ilast)
 				for jr := ifrstm; jr <= jrmax; jr++ {
-					temp = tau * (h[jr*ldh+j] + v[1]*h[jr*ldh+j+1] + v[2]*h[jr*ldh+j+2])
-					h[jr*ldh+j] -= temp
-					h[jr*ldh+j+1] -= temp * v[1]
-					h[jr*ldh+j+2] -= temp * v[2]
+					temp = h[jr*ldh+j] + v[1]*h[jr*ldh+j+1] + v[2]*h[jr*ldh+j+2]
+					h[jr*ldh+j] -= temp * tau
+					h[jr*ldh+j+1] -= temp * t2
+					h[jr*ldh+j+2] -= temp * t3
 				}
 				for jr := ifrstm; jr <= j+2; jr++ {
-					temp = tau * (t[jr*ldt+j] + v[1]*t[jr*ldt+j+1] + v[2]*t[jr*ldt+j+2])
-					t[jr*ldt+j] -= temp
-					t[jr*ldt+j+1] -= temp * v[1]
-					t[jr*ldt+j+2] -= temp * v[2]
+					temp = t[jr*ldt+j] + v[1]*t[jr*ldt+j+1] + v[2]*t[jr*ldt+j+2]
+					t[jr*ldt+j] -= temp * tau
+					t[jr*ldt+j+1] -= temp * t2
+					t[jr*ldt+j+2] -= temp * t3
 				}
 				if ilz {
 					for jr := 0; jr < n; jr++ {
 						temp = tau * (z[jr*ldz+j] + v[1]*z[jr*ldz+j+1] + v[2]*z[jr*ldz+j+2])
-						z[jr*ldz+j] -= temp
-						z[jr*ldz+j+1] -= temp * v[1]
-						z[jr*ldz+j+2] -= temp * v[2]
+						z[jr*ldz+j] -= temp * tau
+						z[jr*ldz+j+1] -= temp * t2
+						z[jr*ldz+j+2] -= temp * t3
 					}
 				}
 				t[(j+1)*ldt+j] = 0
@@ -886,12 +888,12 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 			c, s, t[(j+1)*ldt+j+1] = impl.Dlartg(temp, t[(j+1)*ldt+j])
 			t[(j+1)*ldt+j] = 0
 
-			for jr := ifrstm; jr <= ilastm; jr++ {
+			for jr := ifrstm; jr <= ilast; jr++ {
 				temp = c*h[jr*ldh+j+1] + s*h[jr*ldh+j]
 				h[jr*ldh+j] = -s*h[jr*ldh+j+1] + c*h[jr*ldh+j]
 				h[jr*ldh+j+1] = temp
 			}
-			for jr := ifrstm; jr <= ilastm; jr++ {
+			for jr := ifrstm; jr <= ilast-1; jr++ {
 				temp = c*t[jr*ldt+j+1] + s*t[jr*ldt+j]
 				t[jr*ldt+j] = -s*t[jr*ldt+j+1] + c*t[jr*ldt+j]
 				t[jr*ldt+j+1] = temp

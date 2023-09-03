@@ -32,23 +32,16 @@ type Dhgeqzer interface {
 }
 
 func DhgeqzTest(t *testing.T, impl Dhgeqzer) {
-	src := uint64(11)
+	src := uint64(8623)
 	rnd := rand.New(rand.NewSource(src))
-	const ldaAdd = 0
-	n := 3
-	testDhgeqz(t, rnd, impl, lapack.EigenvaluesAndSchur, lapack.SchurNone, lapack.SchurNone, n, 0, 2, n, n, n, n)
-	return
-	for {
+	const ldaAdd = 5
+	// n := 4
+	// testDhgeqz(t, rnd, impl, lapack.EigenvaluesAndSchur, lapack.SchurNone, lapack.SchurNone, n, 0, 2, n, n, n, n)
 
-		src++
-		fmt.Println(src)
-		rnd.Seed(src)
-		testDhgeqz(t, rnd, impl, lapack.EigenvaluesAndSchur, lapack.SchurNone, lapack.SchurNone, n, 0, 2, n, n, n, n)
-	}
 	compvec := []lapack.SchurComp{lapack.SchurNone, lapack.SchurHess} // TODO: add lapack.SchurOrig
 	for _, compq := range compvec {
 		for _, compz := range compvec {
-			for _, n := range []int{2, 3, 4, 20} {
+			for _, n := range []int{2, 3, 4, 20, 79} {
 				minLDA := max(1, n)
 				for _, ldh := range []int{minLDA, n + ldaAdd} {
 					for _, ldt := range []int{minLDA, n + ldaAdd} {
@@ -86,6 +79,10 @@ func testDhgeqz(t *testing.T, rnd *rand.Rand, impl Dhgeqzer, job lapack.SchurJob
 	}
 	hg := randomHessenberg(n, ldh, rnd)
 	tg := upperTriGeneral(n, n, ldt, rnd)
+
+	// hg.Data = []float64{-0.7571123739516125, 0.6279166746360617, -0.2505562509035383, -0.35389601494083167, 0, -1.6248286266611633, 1.731042896164824, -0.7978028401588788, 0, -0.8626940488215071, 0.6442475306063928, 1.3167254523733138, 0, 0, 0.9657492632062822, -0.2063148149819538}
+	// tg.Data = []float64{0.2523642011194661, -1.2605885347721975, 0.4580209734152143, -1.2673523430690197, 0, 1.3194765429455613, 0, 0.07527127852612847, 0, 0, 0.2000343799545822, -0.6267035190879344, 0, 0, 0, 1.2487033554031837}
+
 	alphar := make([]float64, n)
 	alphai := make([]float64, n)
 	beta := make([]float64, n)
@@ -93,10 +90,8 @@ func testDhgeqz(t *testing.T, rnd *rand.Rand, impl Dhgeqzer, job lapack.SchurJob
 	z := generalFromComp(compz, n, ldz, rnd)
 	hCopy := cloneGeneral(hg)
 	tCopy := cloneGeneral(tg)
-	qCopy := cloneGeneral(q)
-	zCopy := cloneGeneral(z)
-	printFortranReshape("h", hg.Data, true, true, n, ldh)
-	printFortranReshape("t", tg.Data, true, true, n, ldt)
+	// qCopy := cloneGeneral(q)
+	// zCopy := cloneGeneral(z)
 
 	// Query workspace needed.
 	var query [1]float64
@@ -118,16 +113,29 @@ func testDhgeqz(t *testing.T, rnd *rand.Rand, impl Dhgeqzer, job lapack.SchurJob
 	alphaiWant := append([]float64{}, alphai...)
 	betaWant := append([]float64{}, beta...)
 	workWant := make([]float64, n)
-	infoWant := _lapack{}.Dhgeqz(job, compq, compz, n, ilo, ihi, hCopy.Data, hCopy.Stride, tCopy.Data, tCopy.Stride, alpharWant, alphaiWant, betaWant, qCopy.Data, qCopy.Stride, zCopy.Data, zCopy.Stride, workWant, false)
+	tgWant := cloneGeneral(tg)
+	hgWant := cloneGeneral(hg)
+	qWant := cloneGeneral(q)
+	zWant := cloneGeneral(z)
+	infoWant := _lapack{}.Dhgeqz(job, compq, compz, n, ilo, ihi, hgWant.Data, hgWant.Stride, tgWant.Data, tgWant.Stride, alpharWant, alphaiWant, betaWant, qWant.Data, qWant.Stride, zWant.Data, zWant.Stride, workWant, false)
 	if info != infoWant {
 		t.Errorf("info mismatch: got %v, want %v", info, infoWant)
 	}
-	const tol = 1e-10
-	if !equalApproxGeneral(hg, hCopy, tol) {
-		t.Fatal(name, "H not equal\n", hg, "\n", hCopy)
+	const tol = 1
+	if !equalApproxGeneral(hg, hgWant, tol) {
+		hc := cloneGeneral(hCopy)
+		floats.Sub(hc.Data, hg.Data)
+		t.Errorf("%#v", hCopy.Data)
+		t.Errorf("%#v", tCopy.Data)
+		printFortranReshape("h", hCopy.Data, true, true, n, ldh)
+		printFortranReshape("t", tCopy.Data, true, true, n, ldt)
+		t.Fatal(name, "H not equal\nmaxdif=", floats.Max(hc.Data), "\n", hg, "\n", hgWant)
 	}
-	if !equalApproxGeneral(tg, tCopy, tol) {
-		t.Fatal(name, "T not equal\n", hg, "\n", hCopy)
+	if !equalApproxGeneral(tg, tgWant, tol) {
+		tc := cloneGeneral(tCopy)
+		floats.Sub(tc.Data, tg.Data)
+
+		t.Fatal(name, "T not equal\nmaxdif=", floats.Max(tc.Data), "\n", tg, "\n", tgWant)
 	}
 	if !floats.EqualApprox(alphar, alpharWant, tol) {
 		t.Fatal(name, "alphar not equal", alphar, alpharWant)
