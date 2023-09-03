@@ -794,8 +794,8 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 
 				// LU Factor.
 				temp = w21 / w11
-				u2 = u2 - temp*u1
-				w22 = w22 - temp*w12
+				u2 -= temp * u1
+				w22 -= temp * w12
 				w21 = 0
 
 				// Compute scale.

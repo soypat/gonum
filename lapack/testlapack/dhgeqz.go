@@ -32,23 +32,31 @@ type Dhgeqzer interface {
 }
 
 func DhgeqzTest(t *testing.T, impl Dhgeqzer) {
-	src := uint64(8623)
+	src := uint64(8878)
 	rnd := rand.New(rand.NewSource(src))
 	const ldaAdd = 5
-	// n := 4
-	// testDhgeqz(t, rnd, impl, lapack.EigenvaluesAndSchur, lapack.SchurNone, lapack.SchurNone, n, 0, 2, n, n, n, n)
 
-	compvec := []lapack.SchurComp{lapack.SchurNone, lapack.SchurHess} // TODO: add lapack.SchurOrig
+	n := 4
+	defer func() {
+		t.Error("src", src)
+	}()
+REDO:
+	src++
+	rnd = rand.New(rand.NewSource(src))
+	testDhgeqz(t, rnd, impl, lapack.EigenvaluesAndSchur, lapack.SchurNone, lapack.SchurNone, n, 0, 2, n, n, n, n)
+	goto REDO
+	return
+	compvec := []lapack.SchurComp{lapack.SchurNone, lapack.SchurHess, lapack.SchurOrig} // TODO: add lapack.SchurOrig
 	for _, compq := range compvec {
 		for _, compz := range compvec {
-			for _, n := range []int{2, 3, 4, 20, 79} {
+			for _, n := range []int{2, 3, 4, 9, 16} {
 				minLDA := max(1, n)
 				for _, ldh := range []int{minLDA, n + ldaAdd} {
 					for _, ldt := range []int{minLDA, n + ldaAdd} {
 						for _, ldq := range []int{minLDA, n + ldaAdd} {
 							for _, ldz := range []int{minLDA, n + ldaAdd} {
 								for ilo := 0; ilo < n; ilo++ {
-									for ihi := ilo + 1; ihi < n; ihi++ {
+									for ihi := ilo; ihi < n; ihi++ {
 										testDhgeqz(t, rnd, impl, lapack.EigenvaluesOnly, compq, compz, n, ilo, ihi, ldh, ldt, ldq, ldz)
 										testDhgeqz(t, rnd, impl, lapack.EigenvaluesAndSchur, compq, compz, n, ilo, ihi, ldh, ldt, ldq, ldz)
 									}
@@ -72,7 +80,7 @@ func testDhgeqz(t *testing.T, rnd *rand.Rand, impl Dhgeqzer, job lapack.SchurJob
 		case lapack.SchurHess:
 			return nanGeneral(n, n, ld)
 		case lapack.SchurOrig:
-			panic("not implemented")
+			return randomOrthogonal(n, rnd)
 		default:
 			panic("bad comp")
 		}
@@ -90,8 +98,20 @@ func testDhgeqz(t *testing.T, rnd *rand.Rand, impl Dhgeqzer, job lapack.SchurJob
 	z := generalFromComp(compz, n, ldz, rnd)
 	hCopy := cloneGeneral(hg)
 	tCopy := cloneGeneral(tg)
-	// qCopy := cloneGeneral(q)
-	// zCopy := cloneGeneral(z)
+	alpharWant := append([]float64{}, alphar...)
+	alphaiWant := append([]float64{}, alphai...)
+	betaWant := append([]float64{}, beta...)
+	tgWant := cloneGeneral(tg)
+	hgWant := cloneGeneral(hg)
+	qWant := cloneGeneral(q)
+	zWant := cloneGeneral(z)
+	var qCopy, zCopy blas64.General
+	if compq != lapack.SchurNone {
+		qCopy = cloneGeneral(q)
+	}
+	if compz != lapack.SchurNone {
+		zCopy = cloneGeneral(z)
+	}
 
 	// Query workspace needed.
 	var query [1]float64
@@ -102,29 +122,22 @@ func testDhgeqz(t *testing.T, rnd *rand.Rand, impl Dhgeqzer, job lapack.SchurJob
 	}
 
 	work := make([]float64, lwork)
-
+	workWant := append([]float64{}, work...)
 	info := impl.Dhgeqz(job, compq, compz, n, ilo, ihi, hg.Data, hg.Stride, tg.Data, tg.Stride, alphar, alphai, beta, q.Data, q.Stride, z.Data, z.Stride, work, false)
 	if info >= 0 {
 		t.Error("got nonzero info", info)
 	}
 
 	// fmt.Println(alphar, alphai, beta)
-	alpharWant := append([]float64{}, alphar...)
-	alphaiWant := append([]float64{}, alphai...)
-	betaWant := append([]float64{}, beta...)
-	workWant := make([]float64, n)
-	tgWant := cloneGeneral(tg)
-	hgWant := cloneGeneral(hg)
-	qWant := cloneGeneral(q)
-	zWant := cloneGeneral(z)
+
 	infoWant := _lapack{}.Dhgeqz(job, compq, compz, n, ilo, ihi, hgWant.Data, hgWant.Stride, tgWant.Data, tgWant.Stride, alpharWant, alphaiWant, betaWant, qWant.Data, qWant.Stride, zWant.Data, zWant.Stride, workWant, false)
 	if info != infoWant {
 		t.Errorf("info mismatch: got %v, want %v", info, infoWant)
 	}
-	const tol = 1
+	const tol = .1
 	if !equalApproxGeneral(hg, hgWant, tol) {
-		hc := cloneGeneral(hCopy)
-		floats.Sub(hc.Data, hg.Data)
+		hc := cloneGeneral(hg)
+		floats.Sub(hc.Data, hgWant.Data)
 		t.Errorf("%#v", hCopy.Data)
 		t.Errorf("%#v", tCopy.Data)
 		printFortranReshape("h", hCopy.Data, true, true, n, ldh)
@@ -132,10 +145,20 @@ func testDhgeqz(t *testing.T, rnd *rand.Rand, impl Dhgeqzer, job lapack.SchurJob
 		t.Fatal(name, "H not equal\nmaxdif=", floats.Max(hc.Data), "\n", hg, "\n", hgWant)
 	}
 	if !equalApproxGeneral(tg, tgWant, tol) {
+		_, _ = qCopy, zCopy
 		tc := cloneGeneral(tCopy)
 		floats.Sub(tc.Data, tg.Data)
-
 		t.Fatal(name, "T not equal\nmaxdif=", floats.Max(tc.Data), "\n", tg, "\n", tgWant)
+	}
+	if !equalApproxGeneral(q, qWant, tol) {
+		qc := cloneGeneral(q)
+		floats.Sub(qc.Data, qWant.Data)
+		t.Fatal(name, "Q not equal\nmaxdif=", floats.Max(qc.Data), "\n", q, "\n", qWant)
+	}
+	if !equalApproxGeneral(z, zWant, tol) {
+		zc := cloneGeneral(z)
+		floats.Sub(zc.Data, zWant.Data)
+		t.Fatal(name, "Q not equal\nmaxdif=", floats.Max(zc.Data), "\n", q, "\n", qWant)
 	}
 	if !floats.EqualApprox(alphar, alpharWant, tol) {
 		t.Fatal(name, "alphar not equal", alphar, alpharWant)
