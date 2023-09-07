@@ -18,7 +18,7 @@ import (
 // On the initial call, kase must be 0.
 // In between calls, x must be overwritten by
 //
-//	A * X    if kase was returned as 1,
+//	A  * X   if kase was returned as 1,
 //	Aᵀ * X   if kase was returned as 2,
 //
 // and all other parameters must not be changed.
