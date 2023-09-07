@@ -157,6 +157,12 @@ func (impl Implementation) Dtgsen(ijob int, wantq, wantz bool, bselect []bool, n
 		panic(shortSelect)
 	}
 
+	var (
+		dscale   float64
+		ierr, ks int
+		isave    [3]int
+	)
+
 	wantp := ijob == 1 || ijob == 4 || ijob == 5
 	wantd1 := ijob == 2 || ijob == 4 || ijob == 5
 	wantd2 := ijob == 3 || ijob == 5
@@ -185,7 +191,6 @@ func (impl Implementation) Dtgsen(ijob int, wantq, wantz bool, bselect []bool, n
 
 	// Collect the selected blocks at the top-left corner of (A,B).
 
-	ks := 0
 	pair = false
 	for k := 0; k < n; k++ {
 		if pair {
@@ -223,11 +228,7 @@ func (impl Implementation) Dtgsen(ijob int, wantq, wantz bool, bselect []bool, n
 			}
 		}
 	} // 30 Continue.
-	var (
-		dscale float64
-		ierr   int
-		isave  [3]int
-	)
+
 	if wantp {
 		// Solve generalized Sylvester equation for R and L
 		// and compute PL and PR.
@@ -364,6 +365,9 @@ Sixty: // Check illCondition and lworkTooSmall flags.
 				beta[k] = b[k*ldb+k]
 			}
 		}
+	}
+	if ierr >= 0 && !illConditioned {
+		println("Dtgsyl perturbation", ierr)
 	}
 	work[0] = float64(lwmin)
 	iwork[0] = liwmin
