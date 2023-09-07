@@ -78,7 +78,7 @@ import (
 // Ref: C.B. Moler & G.W. Stewart, "An Algorithm for Generalized Matrix Eigenvalue Problems", SIAM J. Numer. Anal., 10(1973), pp. 241--256.
 // https://doi.org/10.1137/0710024
 func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.SchurComp, n, ilo, ihi int, h []float64, ldh int, t []float64, ldt int, alphar, alphai, beta, q []float64, ldq int, z []float64, ldz int, work []float64, workspaceQuery bool) (info int) {
-	_ = _column(h, 1, 0, 0)
+	_ = _columns(h, 1, 0, 0)
 	var (
 		jiter int // counts QZ iterations in main loop.
 		// counts iterations run since ILAST was last changed.
@@ -182,7 +182,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 	// Set eigenvalues ihi+1 to n.
 	for j = ihi + 1; j < n; j++ {
 		if t[j*ldt+j] < 0 {
-			if ilschr {
+			if job == lapack.EigenvaluesAndSchur {
 				for jr := 0; jr <= j; jr++ {
 					h[jr*ldh+j] *= -1
 					t[jr*ldt+j] *= -1
@@ -214,7 +214,7 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 	// Row operations modify columns whatever:ILASTM.
 	//
 	// iiter counts iterations since last eigenvalue was found
-	//  to tell when to use an extraordinary shift.
+	// to tell when to use an extraordinary shift.
 	// Maxit is the maximum number of QZ sweeps allowed.
 	ilast = ihi
 	ifrstm = ilo
@@ -223,7 +223,6 @@ func (impl Implementation) Dhgeqz(job lapack.SchurJob, compq, compz lapack.Schur
 		ifrstm = 0
 		ilastm = n - 1
 	}
-
 	maxiter = 30 * (ihi - ilo + 1)
 	for jiter = 1; jiter <= maxiter; jiter++ {
 		// Split the matrix if possible.
@@ -948,6 +947,14 @@ func _column(z []float64, ldz, j, m int) []float64 {
 	v := make([]float64, m)
 	for i := range v {
 		v[i] = z[i*ldz+j]
+	}
+	return v
+}
+
+func _columns(z []float64, ldz, n, m int) [][]float64 {
+	v := make([][]float64, n)
+	for i := range v {
+		v[i] = _column(z, ldz, i, m)
 	}
 	return v
 }
