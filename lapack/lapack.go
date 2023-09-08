@@ -57,6 +57,8 @@ type Sort byte
 const (
 	SortIncreasing Sort = 'I'
 	SortDecreasing Sort = 'D'
+	SortNone       Sort = 'N'
+	SortExternal   Sort = 'S'
 )
 
 // StoreV indicates the storage direction of elementary reflectors.
@@ -81,9 +83,10 @@ const (
 type MatrixType byte
 
 const (
-	General  MatrixType = 'G' // A general dense matrix.
-	UpperTri MatrixType = 'U' // An upper triangular matrix.
-	LowerTri MatrixType = 'L' // A lower triangular matrix.
+	General    MatrixType = 'G' // A general dense matrix.
+	UpperTri   MatrixType = 'U' // An upper triangular matrix.
+	LowerTri   MatrixType = 'L' // A lower triangular matrix.
+	Hessenberg MatrixType = 'H' // A Hessenberg matrix.
 )
 
 // Pivot specifies the pivot type for plane rotations.
@@ -225,4 +228,17 @@ type MaximizeNormXJob byte
 const (
 	LocalLookAhead       MaximizeNormXJob = 0 // Solve Z*x=h-f where h is a vector of ±1.
 	NormalizedNullVector MaximizeNormXJob = 2 // Compute an approximate null-vector e of Z, normalize e and solve Z*x=±e-f.
+)
+
+// SelectGFunc specifies the criterion for selecting a pair of eigenvalues in Dgges.
+type SelectGFunc func(w complex128, scale float64) (selected bool)
+
+// Sense specifies which reciprocal condition numbers to compute in Dgges.
+type Sense byte
+
+const (
+	SenseNone     Sense = 'N' // Do not compute reciprocal condition numbers.
+	SenseAverage  Sense = 'E' // Computed for average of selected eigenvalues only.
+	SenseDeflated Sense = 'V' // Computed for selected deflated subspaces only.
+	SenseBoth     Sense = 'B' // Compute for average of selected eigenvalues and selected deflated subspaces.
 )
