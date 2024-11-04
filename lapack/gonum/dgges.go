@@ -242,15 +242,17 @@ func (impl Implementation) Dgges(jobvsl, jobvsr lapack.UpdateSchurComp, sort lap
 			bigR := alphar[i]/safmax > (anrmto/anrm) || safmin/alphar[i] > (anrm/anrmto)
 			bigI := alphai[i]/safmax > (anrmto/anrm) || safmin/alphai[i] > (anrm/anrmto)
 			if bigR {
-				work[0] = math.Abs(a[i*lda+i] / alphar[i])
-				beta[i] *= work[0]
-				alphar[i] *= work[0]
-				alphai[i] *= work[0]
+				temp := math.Abs(a[i*lda+i] / alphar[i])
+				beta[i] *= temp
+				alphar[i] *= temp
+				alphai[i] *= temp
+				work[0] = temp
 			} else if bigI {
-				work[0] = math.Abs(a[i*lda+i] / alphai[i])
-				beta[i] *= work[0]
-				alphar[i] *= work[0]
-				alphai[i] *= work[0]
+				temp := math.Abs(a[i*lda+i] / alphai[i])
+				beta[i] *= temp
+				alphar[i] *= temp
+				alphai[i] *= temp
+				work[0] = temp
 			}
 		}
 	}
@@ -262,10 +264,11 @@ func (impl Implementation) Dgges(jobvsl, jobvsr lapack.UpdateSchurComp, sort lap
 			}
 			bigB := beta[i]/safmax > (bnrmto/bnrm) || safmin/beta[i] > (bnrm/bnrmto)
 			if bigB {
-				work[0] = math.Abs(b[i*ldb+i] / beta[i])
-				beta[i] *= work[0]
-				alphar[i] *= work[0]
-				alphai[i] *= work[0]
+				temp := math.Abs(b[i*ldb+i] / beta[i])
+				beta[i] *= temp
+				alphar[i] *= temp
+				alphai[i] *= temp
+				work[0] = temp
 			}
 		}
 	}
@@ -288,7 +291,6 @@ func (impl Implementation) Dgges(jobvsl, jobvsr lapack.UpdateSchurComp, sort lap
 		lst2sl := true
 		ip := 0
 		sdim = 0
-		var cursl bool
 		for i := 0; i < n; i++ {
 			cursl := selctg(complex(alphar[i], alphai[i]), beta[i])
 			if alphai[i] == 0 {
